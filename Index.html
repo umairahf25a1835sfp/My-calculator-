@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Integration Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.8.0/math.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            max-width: 800px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        h2 {
+            margin-top: 0;
+            color: #1a73e8;
+            text-align: center;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #5f6368;
+        }
+        input {
+            padding: 8px 12px;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus {
+            border-color: #1a73e8;
+        }
+        .result-box {
+            text-align: center;
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin: 15px 0;
+            padding: 10px;
+            background: #e8f0fe;
+            color: #1967d2;
+            border-radius: 6px;
+        }
+        .error {
+            color: #d93025;
+            background: #fce8e6;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        .syntax-guide {
+            font-size: 0.8rem;
+            color: #70757a;
+            margin-top: 5px;
+            grid-column: 1 / -1;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Definite Integration Calculator</h2>
+    
+    <div class="controls">
+        <div class="input-group" style="grid-column: span 2;">
+            <label for="functioninput">Function f(x)</label>
+            <input type="text" id="functioninput" value="x^2 - 2x">
+        </div>
+        <div class="input-group">
+            <label for="lowerBound">Lower Bound (a)</label>
+            <input type="number" id="lowerBound" value="0" step="any">
+        </div>
+        <div class="input-group">
+            <label for="upperBound">Upper Bound (b)</label>
+            <input type="number" id="upperBound" value="3" step="any">
+        </div>
+        <div class="syntax-guide">
+            <strong>Syntax tips:</strong> Use <code>*</code> for multiplication (e.g., <code>2*x</code>), <code>^</code> for exponents (e.g., <code>x^2</code>). Supports <code>sin(x)</code>, <code>cos(x)</code>, <code>log(x)</code>, <code>exp(x)</code>.
+        </div>
+    </div>
+
+    <div id="result" class="result-box">Area: Calculating...</div>
+
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+</div>
+
+<script>
+    let chart;
+    const functionInput = document.getElementById('functioninput');
+    const lowerInput = document.getElementById('lowerBound');
+    const upperInput = document.getElementById('upperBound');
+    const resultDiv = document.getElementById('result');
+
+    // Attach event listeners for real-time updates
+    functionInput.addEventListener('input', updateCalculator);
+    lowerInput.addEventListener('input', updateCalculator);
+    upperInput.addEventListener('input', updateCalculator);
+
+    // Initialize Chart
+    const ctx = document.getElementById('myChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { type: 'linear', position: 'bottom', title: { display: true, text: 'x' } },
+                y: { title: { display: true, text: 'y' } }
+            },
+            plugins: { legend: { display: false } },
+            elements: { point: { radius: 0 } } // Hides points for a smooth curve
+        }
+    });
+
+    function calculateIntegral(expr, a, b) {
+        const n = 1000; // number of subintervals
+        const h = (b - a) / n;
+        let sum = 0.5 * (expr.evaluate({x: a}) + expr.evaluate({x: b}));
+        
+        for (let i = 1; i < n; i++) {
+            let x = a + i * h;
+            sum += expr.evaluate({x: x});
+        }
+        return sum * h;
+    }
+
+    function updateCalculator() {
+        try {
+            resultDiv.classList.remove('error');
+            const exprString = functionInput.value;
+            const expr = math.compile(exprString);
+            const a = parseFloat(lowerInput.value);
+            const b = parseFloat(upperInput.value);
+
+            if (isNaN(a) || isNaN(b)) {
+                resultDiv.innerText = "Please enter valid numerical bounds.";
+                return;
+            }
+
+            // 1. Calculate Area via Integration
+            const area = calculateIntegral(expr, a, b);
+            resultDiv.innerHTML = `$$\\int_{${a}}^{${b}} (${exprString}) \\, dx \\approx ${area.toFixed(4)}$$`;
+
+            // 2. Set up Dynamic Graph View Window
+            const padding = Math.max(Math.abs(b - a) * 0.5, 2);
+            const viewMin = Math.min(a, b) - padding;
+            const viewMax = Math.max(a, b) + padding;
+            
+            const curvePoints = [];
+            const integralPoints = [];
+            const steps = 200;
+            const delta = (viewMax - viewMin) / steps;
+
+            // Generate overall function curve points
+            for (let i = 0; i <= steps; i++) {
+                let x = viewMin + i * delta;
+                try {
+                    let y = expr.evaluate({x: x});
+                    if (typeof y === 'number' && !isNaN(y) && isFinite(y)) {
+                        curvePoints.push({x: x, y: y});
+                    }
+                } catch(e) {}
+            }
+
+            // Generate shaded integral points explicitly bounding [a, b]
+            const intSteps = 100;
+            const intDelta = (b - a) / intSteps;
+            for(let i = 0; i <= intSteps; i++) {
+                let x = a + i * intDelta;
+                try {
+                    let y = expr.evaluate({x: x});
+                    integralPoints.push({x: x, y: y});
+                } catch(e) {}
+            }
+
+            // Update Chart Data
+            chart.data.datasets = [
+                {
+                    label: 'f(x)',
+                    data: curvePoints,
+                    borderColor: '#1a73e8',
+                    borderWidth: 2,
+                    fill: false
+                },
+                {
+                    label: 'Integral Area',
+                    data: integralPoints,
+                    borderColor: 'transparent',
+                    backgroundColor: 'rgba(26, 115, 232, 0.25)',
+                    fill: 'origin', // Shaded down/up to the x-axis baseline
+                    pointRadius: 0
+                }
+            ];
+            chart.update();
+
+        } catch (error) {
+            resultDiv.classList.add('error');
+            resultDiv.innerText = "Equation Error: Check your math syntax!";
+        }
+    }
+
+    // Run on initial page load
+    updateCalculator();
+</script>
+
+</body>
+              </html>
+    
